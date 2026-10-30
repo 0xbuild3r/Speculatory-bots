@@ -1,0 +1,13 @@
+{
+  "name": "speculatory-bots",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Speculatory demo automation: rebalance, expiry and falsifier-watcher bots. They make the same contract calls the Console buttons make.",
+  "engines": { "node": ">=22.5" },
+  "scripts": {
+    "start": "node --experimental-strip-types src/index.ts",
+    "test": "node --experimental-strip-types --test test/unit.test.ts",
+    "e2e": "node --experimental-strip-types test/e2e.ts"
+  }
+}

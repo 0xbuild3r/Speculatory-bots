@@ -19,23 +19,33 @@ registered text, same as the Oracle tab uses.
 
 ## Running
 
+`bash ../Speculatory-backend/script/up.sh` starts this process next to the API when this repo sits
+beside it (`BOTS=0` → the in-process keeper does the three duties instead). By hand:
+
 ```bash
-RPC_URL=http://127.0.0.1:8545 API_URL=http://127.0.0.1:8788 \
-  node --experimental-strip-types src/rebalance.ts   # or expiry.ts / falsifier.ts
+BACKEND_DIR=../Speculatory-backend API_URL=http://127.0.0.1:8788 RPC_URL=http://127.0.0.1:8545 \
+  node --experimental-strip-types src/index.ts
 ```
 
-Same environment as the backend (`script/up.sh` must be up). Roles come from the
-demo mnemonic (solver, reporter) — impersonated, never an investor key.
+The duty code is the backend's `Keeper` (the same methods the Console's manual buttons call); this
+process only decides *when*. Switches and thresholds come from the API (`GET /v1/bots`, set with
+`POST /v1/bots/config` — Console › Dev › Automation, or Portal › Bots); outcomes go back to
+`POST /v1/bots/report`, which is what the per-fund rule ledger shows. Roles come from the demo
+mnemonic (solver, reporter) — impersonated, never an investor key. State that must survive a restart
+(the weights last acted on, the price where each watch began, confirm streaks) is one JSON file.
 
 ## Tests
 
 - `npm test` — unit: condition evaluation, drift math, expiry predicates.
-- `node test/e2e.ts` — one run on a **pristine chain** (`../Speculatory-backend/script/up.sh`,
-  which resets, deploys and seeds):
+- `node --experimental-strip-types test/e2e.ts` — one run on a **pristine chain**
+  (`BOTS=hold bash ../Speculatory-backend/script/up.sh`: resets, deploys, seeds, and leaves the three
+  duties to the bots without starting the process — the test drives the same tick code itself; 23 checks):
   - seed a bear scenario → watcher fires the falsifier (kind 1) once, vault
     `falsifiedAt` set, early settlement runs; a second tick fires nothing;
-  - fire a signal by hand → rebalance bot trades inside the window and the
-    `SwapJournal` entry ties back to it;
+  - a signal condition is met → the watcher fires it once; the rebalance bot trades through
+    the bonded solver (`IntentBook.rebalance`, venue buys/sells visible at `/v1/dex/swaps`) and the
+    ledger's REBALANCE line carries that transaction. (`SwapJournal` is the Author's own name
+    rotation — a bot never writes to it);
   - warp past `termEnd` → book flat, units redeemable, score booked exactly once.
 
 ## Invariants (the review bar)
@@ -52,9 +62,12 @@ demo mnemonic (solver, reporter) — impersonated, never an investor key.
 ## Layout
 
 ```
-src/rebalance.ts        weight watcher + solver call
-src/expiry.ts           term-end close / redeem-window runner
-src/falsifier.ts        condition watcher + fire
-src/lib.ts              chain/api glue, roles, the "already done" guards
+src/index.ts            the loop: targets from the API, then falsifier → rebalance → expiry
+src/rebalance.ts        weight watcher + solver call (Keeper.rebalance)
+src/expiry.ts           term-end close / redeem-window runner (Keeper.termEnd)
+src/falsifier.ts        condition watcher + fire (Keeper.fire)
+src/logic.ts            the decisions, pure (conditions, streaks, thresholds, switches)
+src/ctx.ts              chain/api glue, the Keeper wiring, the state file
+test/unit.test.ts       npm test
 test/e2e.ts             pristine-chain story, one run per verification
 ```
